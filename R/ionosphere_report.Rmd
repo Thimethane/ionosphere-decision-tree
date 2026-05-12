@@ -1,0 +1,175 @@
+---
+title: "Ionosphere Classification using Decision Trees"
+author: "Timothee RINGUYNEZA"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+    highlight: tango
+    code_folding: show
+  pdf_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo    = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.width  = 10,
+  fig.height = 7
+)
+```
+
+---
+
+## Background
+
+This analysis applies **decision tree classification** to the **UCI Ionosphere dataset**, collected by a phased-array radar system in Goose Bay, Labrador.
+
+- The system uses **16 high-frequency antennas** with ~6.4 kW total transmitted power.
+- Targets are free electrons in the ionosphere.
+- **"Good"** returns show evidence of ionospheric structure.
+- **"Bad"** returns pass through without interaction.
+- Each observation has **34 continuous features** (2 per pulse × 17 pulses) plus a binary class label.
+
+---
+
+## Part 1 — Print the Decision Tree
+
+### 1a. Setup: Load Packages and Data
+
+```{r load-data}
+library(rpart)
+library(mlbench)
+library(rpart.plot)
+
+data(Ionosphere)
+
+cat("Dimensions:", nrow(Ionosphere), "x", ncol(Ionosphere), "\n")
+table(Ionosphere$Class)
+```
+
+The dataset contains **`r nrow(Ionosphere)` observations** and **`r ncol(Ionosphere)` variables** (34 features + 1 class label).
+
+### 1b. Build the Decision Tree
+
+```{r build-tree}
+tree_full <- rpart(Class ~ ., data = Ionosphere)
+print(tree_full)
+```
+
+### 1c. Plot the Decision Tree
+
+**Basic plot using `plot()` and `text()`:**
+
+```{r plot-basic, fig.cap="Basic Decision Tree - Ionosphere Classification"}
+par(mar = c(1, 1, 2, 1))
+plot(tree_full, uniform = TRUE,
+     main = "Ionosphere Classification — Decision Tree")
+text(tree_full, use.n = TRUE, all = TRUE, cex = 0.8)
+```
+
+**Enhanced plot using `rpart.plot`:**
+
+```{r plot-enhanced, fig.cap="Enhanced Decision Tree with class probabilities"}
+rpart.plot(
+  tree_full,
+  type          = 4,
+  extra         = 104,
+  fallen.leaves = TRUE,
+  main          = "Ionosphere Decision Tree (Enhanced)",
+  cex           = 0.85,
+  box.palette   = list(bad = "#E74C3C", good = "#27AE60")
+)
+```
+
+**Interpretation:** Each node shows the predicted class, class probabilities, and the percentage of observations reaching that node. The tree splits primarily on radar pulse features (V3, V5, etc.).
+
+---
+
+## Part 2 — Estimate Accuracy
+
+### 2a. Train / Test Split
+
+```{r split-data}
+set.seed(42)
+n     <- nrow(Ionosphere)
+train <- sample(1:n, size = floor(0.7 * n), replace = FALSE)
+test  <- setdiff(1:n, train)
+
+cat("Training size:", length(train), "\n")
+cat("Testing size :", length(test),  "\n")
+```
+
+### 2b. Build Tree on Training Data
+
+```{r train-tree}
+tree_train <- rpart(Class ~ ., data = Ionosphere, subset = train)
+print(tree_train)
+```
+
+### 2c. Predict on Test Data
+
+```{r predict}
+predictions <- predict(tree_train,
+                       newdata = Ionosphere[test, ],
+                       type    = "class")
+head(predictions)
+```
+
+### 2d. Confusion Table and Accuracy
+
+```{r accuracy}
+true_labels <- Ionosphere$Class[test]
+conf_table  <- table(Predicted = predictions, Actual = true_labels)
+print(conf_table)
+
+TP       <- conf_table["good", "good"]
+TN       <- conf_table["bad",  "bad"]
+accuracy <- (TP + TN) / length(test)
+
+cat(sprintf("\nAccuracy = (%d + %d) / %d = %.4f (%.2f%%)\n",
+            TP, TN, length(test), accuracy, accuracy * 100))
+```
+
+**The model achieves approximately `r round(accuracy * 100, 1)`% accuracy** on the held-out test set.
+
+---
+
+## Bonus — 10-Fold Cross-Validation
+
+```{r cross-validation}
+set.seed(42)
+k      <- 10
+folds  <- cut(sample(1:n), breaks = k, labels = FALSE)
+cv_acc <- numeric(k)
+
+for (i in 1:k) {
+  cv_test  <- which(folds == i)
+  cv_train <- which(folds != i)
+  cv_tree  <- rpart(Class ~ ., data = Ionosphere, subset = cv_train)
+  cv_pred  <- predict(cv_tree, newdata = Ionosphere[cv_test, ], type = "class")
+  cv_acc[i] <- mean(cv_pred == Ionosphere$Class[cv_test])
+}
+
+cat(sprintf("Mean CV Accuracy: %.4f (%.2f%%)\n", mean(cv_acc), mean(cv_acc) * 100))
+cat(sprintf("Std Dev: %.4f\n", sd(cv_acc)))
+```
+
+---
+
+## Summary
+
+| Metric | Value |
+|---|---|
+| Dataset size | `r nrow(Ionosphere)` observations |
+| Features | 34 continuous (2 per pulse × 17 pulses) |
+| Classes | good / bad |
+| Train/Test split | 70% / 30% |
+| Test Accuracy | ~`r round(accuracy * 100, 1)`% |
+| CV Accuracy (10-fold) | ~`r round(mean(cv_acc) * 100, 1)`% |
+
+The decision tree classifier performs well on this dataset, correctly identifying ionospheric structure in radar returns with high accuracy. The tree is interpretable and reveals which pulse features are most discriminative.
