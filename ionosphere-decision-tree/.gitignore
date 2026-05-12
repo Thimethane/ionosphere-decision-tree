@@ -1,0 +1,24 @@
+# R specific
+.Rhistory
+.RData
+.Rproj.user/
+*.Rproj
+
+# R Markdown outputs (keep only committed renders)
+/docs/*.html
+/docs/*.pdf
+
+# Output images (generated at runtime)
+/output/*.png
+/output/*.pdf
+
+# Data files (large or downloaded at runtime)
+/data/Ionosphere.txt
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+*.swp
